@@ -7,6 +7,8 @@ from database import get_session
 from models import Post
 from auth import get_current_user
 import os
+from fastapi.responses import StreamingResponse
+import json
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
@@ -79,3 +81,35 @@ async def conversation(
         ],
         "latest_response": response.choices[0].message.content
     }
+
+# Streaming chat endpoint
+@router.post("/chat/stream")
+async def chat_stream(
+    body: ChatMessage,
+    
+):
+    async def generate():
+        # stream=True tells Groq to send tokens as they're generated
+        async with client.chat.completions.stream(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": body.message}
+            ],
+        ) as stream:
+            async for text in stream.text_stream:
+                # Send each chunk as a Server-Sent Event
+                chunk = json.dumps({"chunk": text})
+                yield f"data: {chunk}\n\n"
+
+        # Send a done signal when finished
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no"
+        }
+    )
