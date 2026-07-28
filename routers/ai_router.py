@@ -89,20 +89,21 @@ async def chat_stream(
     
 ):
     async def generate():
-        # stream=True tells Groq to send tokens as they're generated
-        async with client.chat.completions.stream(
+        stream = await client.chat.completions.create(
             model=MODEL,
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": body.message}
             ],
-        ) as stream:
-            async for text in stream.text_stream:
-                # Send each chunk as a Server-Sent Event
-                chunk = json.dumps({"chunk": text})
-                yield f"data: {chunk}\n\n"
+            stream=True
+        )
 
-        # Send a done signal when finished
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                data = json.dumps({"chunk": delta})
+                yield f"data: {data}\n\n"
+
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
