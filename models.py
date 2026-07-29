@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import DeclarativeBase, relationship
 from datetime import datetime
 
@@ -52,3 +53,16 @@ class Comment(Base):
 
     author = relationship("User", back_populates="comments")
     post = relationship("Post", back_populates="comments")
+
+
+class Document(Base):
+    __tablename__ = "documents"
+
+    id = Column(Integer, primary_key=True)
+    filename = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)       # original text chunk
+    embedding = Column(Vector(384))              # vector representation
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", backref="documents")
