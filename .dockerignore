@@ -1,0 +1,8 @@
+.env
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitignore
+alembic/versions/__pycache__
+routers/__pycache__
