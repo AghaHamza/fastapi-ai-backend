@@ -8,7 +8,9 @@ from models import Post
 from auth import get_current_user
 import os
 from fastapi.responses import StreamingResponse
+from redis_client import redis
 import json
+import hashlib
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
@@ -21,12 +23,38 @@ class ChatMessage(BaseModel):
 class SummarizeRequest(BaseModel):
     post_id: int
 
+async def check_rate_limit(user_id: int):
+    key = f"rate_limit:user:{user_id}"
+    count = await redis.incr(key)
+
+    # Set TTL on first request
+    if count == 1:
+        await redis.expire(key, 60)  # reset after 60 seconds
+
+    if count > 10:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Max 10 requests per minute. Try again in 60 seconds."
+        )
+
 # Simple chat
 @router.post("/chat")
 async def chat(
     body: ChatMessage,
     user_id: int = Depends(get_current_user)
 ):
+    await check_rate_limit(user_id)
+    # Create a cache key from the message
+    cache_key = f"chat:{hashlib.md5(body.message.encode()).hexdigest()}"
+
+    # Check cache first
+    cached = await redis.get(cache_key)
+    if cached:
+        result = json.loads(cached)
+        result["cached"] = True
+        return result
+
+    # Cache miss — call Groq
     response = await client.chat.completions.create(
         model=MODEL,
         messages=[
@@ -34,10 +62,18 @@ async def chat(
             {"role": "user", "content": body.message}
         ]
     )
-    return {
+
+    result = {
         "response": response.choices[0].message.content,
-        "tokens_used": response.usage.total_tokens
+        "tokens_used": response.usage.total_tokens,
+        "cached": False
     }
+
+    # Store in cache for 1 hour (3600 seconds)
+    await redis.setex(cache_key, 3600, json.dumps(result))
+
+    return result
+
 
 # Summarize a blog post
 @router.post("/summarize")
