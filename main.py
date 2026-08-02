@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 load_dotenv()
 
-from routers import auth_router, posts_router, ai_router, rag_router
+from routers import auth_router, posts_router, ai_router, rag_router, ws_router
 from database import engine
 from models import Base
 
@@ -21,3 +21,4 @@ app.include_router(auth_router.router)
 app.include_router(posts_router.router)
 app.include_router(ai_router.router)
 app.include_router(rag_router.router)
+app.include_router(ws_router.router)
